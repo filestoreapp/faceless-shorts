@@ -47,6 +47,14 @@ jobs:
       - name: Point CHROME at the installed browser
         run: echo "CHROME=${{ steps.chrome.outputs.chrome-path }}" >> "$GITHUB_ENV"
 
+      - name: Install Chrome system libraries
+        run: sudo apt-get update && sudo apt-get install -y libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2 libpango-1.0-0 libcairo2
+
+      - name: Smoke-test Chrome (fail fast if the browser cannot start)
+        run: |
+          "$CHROME" --version
+          "$CHROME" --headless=new --no-sandbox --disable-dev-shm-usage --dump-dom about:blank > /dev/null && echo "chrome smoke test OK"
+
       - name: Cache voice + Whisper models
         uses: actions/cache@v4
         with:
