@@ -1,0 +1,94 @@
+name: Render faceless short
+
+on:
+  workflow_dispatch:
+    inputs:
+      project:
+        description: "Project folder to render"
+        required: true
+        default: "brain-freeze-20s"
+      output:
+        description: "Output MP4 file name"
+        required: true
+        default: "brain-freeze-20s.mp4"
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      SOFTWARE_GL: "1"
+      QS: "&res=0.6&aa=0&shadow=1024"
+      FPS: "24"
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install Chrome
+        id: chrome
+        uses: browser-actions/setup-chrome@v1
+
+      - name: Point CHROME at the installed browser
+        run: echo "CHROME=${{ steps.chrome.outputs.chrome-path }}" >> "$GITHUB_ENV"
+
+      - name: Cache voice + Whisper models
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.faceless-shorts
+            ~/.cache/huggingface
+          key: faceless-models-${{ runner.os }}-v1
+
+      - name: Skill setup (first run downloads the free voice + Whisper models, ~0.9 GB)
+        run: bash scripts/setup.sh
+
+      - name: Generate voiceover
+        run: bash scripts/py scripts/voice.py "${{ inputs.project }}"
+
+      - name: Word timings
+        run: bash scripts/py scripts/words.py "${{ inputs.project }}"
+
+      - name: Capture check (must say CHECK OK)
+        run: cd "${{ inputs.project }}" && node tools/capture.mjs check
+
+      - name: Sound cues
+        run: cd "${{ inputs.project }}" && node tools/capture.mjs cues
+
+      - name: Mix soundtrack
+        run: cd "${{ inputs.project }}" && ../scripts/py tools/mix.py .
+
+      - name: Contact sheet (QA — look at it before trusting the video)
+        run: cd "${{ inputs.project }}" && node tools/capture.mjs sheet review/all.jpg 1 10
+
+      - name: Render video
+        run: cd "${{ inputs.project }}" && node tools/capture.mjs video "renders/${{ inputs.output }}"
+
+      - name: Upload video
+        uses: actions/upload-artifact@v4
+        with:
+          name: "${{ inputs.output }}"
+          path: "${{ inputs.project }}/renders/${{ inputs.output }}"
+          retention-days: 7
+
+      - name: Upload contact sheet
+        uses: actions/upload-artifact@v4
+        with:
+          name: contact-sheet
+          path: "${{ inputs.project }}/review/all.jpg"
+          retention-days: 7
